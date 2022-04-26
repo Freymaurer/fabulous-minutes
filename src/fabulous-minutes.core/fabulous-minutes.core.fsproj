@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>netstandard2.0</TargetFramework>
+		<RootNamespace>fabulous_minutes.core</RootNamespace>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<Compile Include="DynamicObjExtension.fs" />
+		<Compile Include="Template.fs" />	
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="DynamicObj" Version="1.0.1" />
+	</ItemGroup>
+
+</Project>
