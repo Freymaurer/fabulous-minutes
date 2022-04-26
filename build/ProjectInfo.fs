@@ -7,6 +7,7 @@ let project = "fabulous-minutes"
 let testProjects = 
     [
         // add relative paths (from project root) to your testprojects here
+        "tests/tests.fsproj"
     ]
 
 let solutionFile  = $"{project}.sln"
