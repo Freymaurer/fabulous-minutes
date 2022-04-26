@@ -15,7 +15,7 @@ Run all bash commands in the root folder.
 #### Update project version and release notes
 
 ```bash
-.\build.cmd RN [semver:patch || semver:minor || semver:major]
+.\build.cmd RN [{semver:patch | semver:minor | semver:major}]
 ```
 
 Use `.\build.cmd RN` to update current release with git commits. Add `semver:xxx` to increase project to the 
