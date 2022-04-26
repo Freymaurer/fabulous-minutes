@@ -9,6 +9,7 @@
     <Compile Include="Helpers.fs" />
     <Compile Include="MessagePrompts.fs" />
     <Compile Include="ProjectInfo.fs" />
+    <Compile Include="ReleaseNoteTasks.fs" />
     <Compile Include="BasicTasks.fs" />
     <Compile Include="TestTasks.fs" />
     <Compile Include="PackageTasks.fs" />

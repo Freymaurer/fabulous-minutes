@@ -16,6 +16,7 @@ open TestTasks
 open PackageTasks
 open DocumentationTasks
 open ReleaseTasks
+open ReleaseNoteTasks
 
 /// Full release of nuget package, git tag, and documentation for the stable version.
 let _release = 
@@ -40,6 +41,11 @@ let _preReleaseNoDocs =
     BuildTask.createEmpty 
         "PreReleaseNoDocs" 
         [setPrereleaseTag; clean; build; runTests; packPrerelease; createPrereleaseTag; publishNugetPrerelease]
+
+let updateReleaseNotes =
+    BuildTask.createEmpty
+        "RN"
+        [updateReleaseNotes]
 
 [<EntryPoint>]
 let main args = 
