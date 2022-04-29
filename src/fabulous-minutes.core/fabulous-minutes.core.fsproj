@@ -1,18 +1,20 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFramework>netstandard2.0</TargetFramework>
+		<TargetFramework>net5.0</TargetFramework>
 		<RootNamespace>fabulous_minutes.core</RootNamespace>
 		<GenerateDocumentationFile>true</GenerateDocumentationFile>
 	</PropertyGroup>
 
 	<ItemGroup>
 		<Compile Include="DynamicObjExtension.fs" />
-		<Compile Include="Template.fs" />	
+		<Compile Include="DynamicAccess.fs" />
+		<Compile Include="Logger.fs" />	
 	</ItemGroup>
 
 	<ItemGroup>
 		<PackageReference Include="DynamicObj" Version="1.0.1" />
+		<PackageReference Include="Giraffe" Version="5.0.0" />
 	</ItemGroup>
 
 </Project>
