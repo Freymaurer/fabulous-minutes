@@ -21,8 +21,6 @@ type Logger(?customLogging: Logger -> unit) =
             t.SetValue("", None)
             t
 
-    member this.ToJson() = DynamicObj.toJson this
-
     member this.GetPath() = 
         this.TryGetTypedValue<Logger> "Request"
         |> Option.bind (fun x ->
@@ -30,11 +28,31 @@ type Logger(?customLogging: Logger -> unit) =
         )
         |> fun x -> if x.IsNone then failwith "Could not find Request.Path in logger object." else x.Value
 
-    member this.DynamicAccess(accessStr:string) = DynamicAccess.dynamicAccess accessStr this |> Option.get
+    member this.TryDynamicAccess(accessStr: string) = 
+        // Uses base function
+        DynamicAccess.dynamicAccess accessStr this
 
-    member this.DynamicAccess<'a>(accessStr:string) = DynamicAccess.dynamicAccess accessStr this |> Option.get :?> 'a
+    member this.TryDynamicAccess<'a>(accessStr: string) = this.TryDynamicAccess(accessStr) |> Option.map (fun obj -> obj :?> 'a)
 
+    /// <sumary> Allows nested access of Logger parameter via string. See docs for default object format.</sumary>
+    /// <param name="accessStr"> String to access object parameters. 
+    /// *Example*: "Request.Path" </param>
+    member this.DynamicAccess(accessStr: string) = this.TryDynamicAccess(accessStr) |> Option.get
+
+    /// <sumary> Allows nested access of Logger parameter via string. Returns parameter as type. See docs for default object format.</sumary>
+    /// <param name="accessStr"> String to access object parameters. 
+    /// *Example*: "Request.Path" </param>
+    member this.DynamicAccess<'a>(accessStr: string) = this.DynamicAccess(accessStr) :?> 'a
+
+    /// <summary> Inserts info from Logger type to prewritten 'templateStr'. </summary>
+    /// <param name="templateStr"> The string to insert info into. Inside Curly braces dynamic access patterns can be used '{}'. 
+    /// *Example*: "Logged {Request.Path} at {Timestamp}." </param>
+    /// <returns> The string with inserted info. </returns>
     member this.ToTemplate(templateStr:string) = DynamicAccess.readDynObjInFormatString(this,templateStr)
+
+    member this.ToJson() = DynamicObj.toJson this
+
+    member this.Print() = this |> DynamicObj.format |> printfn "%s"
 
     member this.BindToHttpHandler (app:HttpHandler) : HttpHandler =
 
@@ -43,14 +61,14 @@ type Logger(?customLogging: Logger -> unit) =
                 let appliedHandler = app next
                 use reader = new StreamReader(ctx.Request.Body)
 
-                /// This will empty 'ctx.Request.Body', which we will have to reinsert afterwards
-                /// Maybe change to this: https://devblogs.microsoft.com/dotnet/re-reading-asp-net-core-request-bodies-with-enablebuffering/
+                // This will empty 'ctx.Request.Body', which we will have to reinsert afterwards
+                // Maybe change to this: https://devblogs.microsoft.com/dotnet/re-reading-asp-net-core-request-bodies-with-enablebuffering/
                 let! body = reader.ReadToEndAsync()
                 let nextSTREAM =
                     let toBytes = System.Text.Encoding.UTF8.GetBytes(body)
                     new MemoryStream(toBytes)
-                //printfn "Text %A" text
-                /// return stream back to body so our Fable.Remoting actually has parameters to work with
+                // printfn "Text %A" text
+                // return stream back to body so our Fable.Remoting actually has parameters to work with
                 ctx.Request.Body <- nextSTREAM
 
                 let! result = appliedHandler ctx

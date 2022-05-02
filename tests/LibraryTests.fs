@@ -91,20 +91,6 @@ let dynamicObj_json_converter_tests =
             let revertToJson = DynamicObj.toJson dynObjOfJson
             Expect.equal json revertToJson "Recreated Json equals json source with empty json object."
         }
-        //test "Test nested prints" {
-        //    let outer = DynamicObj()
-        //    let inner = DynamicObj()
-        //    inner.SetValue("Level", "Information")
-        //    inner.SetValue("MessageTemplate","{Method} Request at {Path}")
-        //    outer.SetValue("serilog", inner)
-        //    let print =
-        //        try 
-        //            outer |> DynObj.print
-        //            true 
-        //        with
-        //            | e -> false
-        //    Expect.isTrue print "Expected to print nested object."
-        //}
         test "Root json array with simple elements" {
             let json = minifyJson """["Ford", "BMW", "Fiat"]"""
             let dynObjOfJson = DynamicObj.ofJson json
@@ -200,4 +186,38 @@ let logger_tests =
             Expect.equal revertToJson simpleJson ""
             Expect.equal dynamicAccessPath "/api/IHelpdeskAPI/checkCaptcha" ""
         }
+        test "Test nested prints" {
+            let outer = Logger()
+            let inner = Logger()
+            inner.SetValue("Level", "Information")
+            inner.SetValue("MessageTemplate","{Method} Request at {Path}")
+            outer.SetValue("serilog", inner)
+            let print =
+                try 
+                    outer.Print()
+                    true 
+                with
+                    | e -> false
+            Expect.isTrue print "Expected to print nested object."
+        }
+
+        test "Test different access functions" {
+            let simpleJson = minifyJson """{"myLog": {"Timestamp": "2022.03.28 07:45:10.00949","Request": {"Path": "/api/IHelpdeskAPI/checkCaptcha","PathBase": "","Method": "POST","Host": "localhost","Port": "8085","QueryString": ""}}}"""
+            let dynObjOfJson = DynamicObj.ofJson (simpleJson)
+            let logger = Logger()
+            dynObjOfJson.CopyDynamicPropertiesTo(logger)
+            let dynamicAccess = logger.DynamicAccess "myLog.Request.Port" 
+            let tryDynamicAccess = logger.TryDynamicAccess "myLog.Request.Port"
+            let dynamicAccessTyped = logger.DynamicAccess<Logger> "myLog"
+            let dynamicAccessTypedInner =
+                let l = Logger()
+                dynamicAccessTyped.CopyDynamicPropertiesTo(l) 
+                l.DynamicAccess "Request.Path"
+            let revertToJson = DynamicObj.toJson dynObjOfJson
+            Expect.equal revertToJson simpleJson ""
+            Expect.equal dynamicAccess "8085" ""
+            Expect.equal tryDynamicAccess (Some "8085") ""
+            Expect.equal dynamicAccessTypedInner "/api/IHelpdeskAPI/checkCaptcha" ""
+        }
+
     ]
