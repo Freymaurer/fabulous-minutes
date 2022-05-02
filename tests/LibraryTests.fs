@@ -186,3 +186,18 @@ let dynamic_access_tests =
             Expect.equal readDynObjIntoFormatString result "readDynObjIntoFormatString should equal result."
         }
     ]
+
+[<Tests>]
+let logger_tests =
+    testList "logger tests" [
+        test "Test simple dynamic access member" {
+            let simpleJson = minifyJson """{"myLog": {"Timestamp": "2022.03.28 07:45:10.00949","Request": {"Path": "/api/IHelpdeskAPI/checkCaptcha","PathBase": "","Method": "POST","Host": "localhost","Port": "8085","QueryString": ""}}}"""
+            let dynObjOfJson = DynamicObj.ofJson (simpleJson)
+            let logger = Logger()
+            dynObjOfJson.CopyDynamicPropertiesTo(logger)
+            let dynamicAccessPath = logger.DynamicAccess "myLog.Request.Path" 
+            let revertToJson = DynamicObj.toJson dynObjOfJson
+            Expect.equal revertToJson simpleJson ""
+            Expect.equal dynamicAccessPath "/api/IHelpdeskAPI/checkCaptcha" ""
+        }
+    ]

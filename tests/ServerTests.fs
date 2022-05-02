@@ -13,9 +13,30 @@ open Expecto.Logging.Message
 
 open FabulousMinutes.Core
 
-type IServer = {
-    getLength : string -> Async<int>
-}
+module StorageUtils =
+
+    type MyLog = {
+        Path: string
+        Body: string
+        IsSuccess: bool
+        Timestamp : string
+    } with
+        static member create path body isSuccess ts = {
+            Path = path
+            Body = body
+            IsSuccess = isSuccess
+            Timestamp = ts
+        }
+
+    let exmpLog = MyLog.create "\test\api\path" """[{"jsonKey": "jsonValue"}]""" true (System.DateTime.Now.ToUniversalTime().ToString())
+
+    type LogStore() = 
+
+        let logs = ResizeArray<(string*MyLog)>()
+
+        member _.GetLogs() = logs |> Array.ofSeq
+
+        member _.AddLog(log:MyLog) = logs.Add(log.Path,log)
 
 type ILoggingServer = {
     helloWorld : unit -> Async<string>
@@ -23,10 +44,6 @@ type ILoggingServer = {
     simpleUnit : unit -> Async<int>
     getLength : string -> Async<int>
     echoString : string -> Async<string>
-}
-
-let server (ctx: HttpContext) : IServer  = {
-    getLength = fun input -> async { return input.Length }
 }
 
 let loggingServer (ctx: HttpContext) : ILoggingServer  = {
@@ -38,40 +55,95 @@ let loggingServer (ctx: HttpContext) : ILoggingServer  = {
 }
 
 module Route =
-    let builder typeName methodName =
-        sprintf "/api/%s/%s" typeName methodName
+    let builder manual typeName methodName =
+        sprintf "/%s/api/%s/%s" manual typeName methodName
 
 let expectoLogger = Log.create "fabulous-minutes"
+
+module Logger = 
+    
+    open Fable.Remoting.Server
+    open Fable.Remoting.Giraffe
+
+    let createWebApp loggingFunc pathIdent =
+        Remoting.createApi()
+        |> Remoting.withRouteBuilder (Route.builder pathIdent)
+        |> Remoting.fromContext loggingServer
+        |> Remoting.buildHttpHandler
+        |> Logger(loggingFunc).BindToHttpHandler
+
+    module Print =
+
+        let logging(str:string) : Logger -> unit = 
+            fun logger -> expectoLogger.info(Message.eventX str)
+
+        let webApp =
+            createWebApp (logging "print web app") "print"
+
+    module DynamicAccessPrint =
+       
+        let dynAccessPrintLogging : Logger -> unit = 
+            fun logger -> 
+                let path = logger.DynamicAccess "Request.Path"
+                let ts = logger.TryGetValue("Timestamp") |> Option.get
+                expectoLogger.info(Message.eventX $"dynAccessPrintLogging: {path} {ts}")
+
+        let webApp =
+            createWebApp dynAccessPrintLogging "dynAcc"
+
+    module DynamicAccessMutable =
+       
+        let mutable str = ""
+
+        let dynAccessPrintLogging : Logger -> unit = 
+            fun logger -> 
+                let path = logger.DynamicAccess "Request.Path" |> string
+                str <- path
+
+        let webApp =
+            createWebApp dynAccessPrintLogging "dynAccMutable"
+
+    module Storage =
+
+        let logStorage = StorageUtils.LogStore()
+
+        logStorage.AddLog(StorageUtils.exmpLog) |> ignore
+
+        let logToStorage : Logger -> unit = 
+            fun logger -> 
+                let p = logger.GetPath()
+                let body = logger.DynamicAccess<string> "Request.Body"
+                let isSuccess = logger.DynamicAccess<string> "Response.StatusCode" |> fun x -> x = "200"
+                let ts = logger.DynamicAccess<string> "Timestamp"
+                StorageUtils.MyLog.create p body isSuccess ts
+                |> logStorage.AddLog
+
+        let webApp =
+            createWebApp logToStorage "storage"
+
 
 module ServerParts =
 
     open Giraffe
-    open Fable.Remoting.AspNetCore
-    open Fable.Remoting.Server
-    open Fable.Remoting.Giraffe
+    //open Fable.Remoting.AspNetCore
     open Microsoft.Extensions.DependencyInjection
 
-    let webApp =
-        Remoting.createApi()
-        |> Remoting.withRouteBuilder Route.builder
-        |> Remoting.fromContext server
+    open Logger
 
-    let logging : Logger -> unit = 
-        fun logger -> expectoLogger.info(Message.eventX "Test HERE")
-
-    let loggingWebApp =
-        Remoting.createApi()
-        |> Remoting.withRouteBuilder Route.builder
-        |> Remoting.fromContext loggingServer
-        |> Remoting.buildHttpHandler
-        |> Logger().bindToHttpHandler
+    let endpoints =
+        choose [
+            // improve perfomance with
+            //routeStartsWith "/dynAcc" >=> PrintDynamicAccess.webApp
+            Print.webApp
+            DynamicAccessPrint.webApp
+            DynamicAccessMutable.webApp
+            Storage.webApp
+        ]
 
     let configureApp (app : IApplicationBuilder) =
-        app.UseRemoting(webApp)
-        app.UseGiraffe loggingWebApp
+        app.UseGiraffe(endpoints)
 
     let configureServices (services : IServiceCollection) =
-        // Add Giraffe dependencies
         services.AddGiraffe() |> ignore
 
     let createHost() =
@@ -83,55 +155,65 @@ module ServerParts =
 open ServerParts
 
 let testServer = new TestServer(createHost())
-let client = testServer.CreateClient()
-
-module LogginBaseCase =
-
-    let testServer = new TestServer(createHost())
-    let client = testServer.CreateClient()
+let client = testServer.CreateClient()  
 
 module ClientParts =
     open Fable.Remoting.DotnetClient
 
     // proxies to different API's
-    let proxy = Proxy.custom<IServer> Route.builder client false
-    let loggingProxy = Proxy.custom<ILoggingServer> Route.builder LogginBaseCase.client false
+    let printLoggerProxy = Proxy.custom<ILoggingServer> (Route.builder "print") client false
+    let dynAccPrintLoggerProxy = Proxy.custom<ILoggingServer> (Route.builder "dynAcc") client false
+    let dynAccMutableLoggerProxy = Proxy.custom<ILoggingServer> (Route.builder "dynAccMutable") client false
+    let storageLoggerProxy = Proxy.custom<ILoggingServer> (Route.builder "storage") client false
 
 open ClientParts
 
 [<Tests>]
 let server_fable_remoting_tests = 
-    testList "Server fable remoting tests " [ 
+    testList "Server fable remoting tests" [ 
 
-        testCaseAsync "TestServer test" <| async {
-            do! expectoLogger.infoWithBP(Message.eventX "start")
-            let! result = proxy.call(fun server -> server.getLength "hello")
+        test "Test storage base case" {
+            let logs = Logger.Storage.logStorage.GetLogs()
+            let exmpLog = logs |> Array.find (fun (p,log) -> p = "\test\api\path")
+            Expect.equal (snd exmpLog) StorageUtils.exmpLog ""
+        }
+
+        testCaseAsync "Logger test with print to console" <| async {
+            let! result = printLoggerProxy.call(fun server -> server.getLength "hello")
             Expect.equal result 5 ""
         }
 
-        testCaseAsync "Base logging test with print to console" <| async {
-            let! result = loggingProxy.call(fun server -> server.getLength "hello")
+        testCaseAsync "Logger test with print to console duplicate (test async)" <| async {
+            let! result = printLoggerProxy.call(fun server -> server.getLength "hello")
             Expect.equal result 5 ""
         }
 
-        //testCaseAsync "Fable base logging test save logg to txt" <| async {
-        //    let mutable res = Logger()
-        //    let logging = 
-        //        fun (logger:Logger) -> 
-        //            let loggedJson = logger.toJson()
-        //            expectoLogger.info(eventX $"JSON: {loggedJson}")
-        //            ()
-        //    let proxy = createloggedTestServer(logging)
-        //    let! result = proxy.call(fun server -> server.getLength "hello") 
-        //    Expect.equal result 5 ""
-        //}
+        testCaseAsync "Logger test with Dynamic Access print to console" <| async {
+            let! result = dynAccPrintLoggerProxy.call(fun server -> server.getLength "hello")
+            Expect.equal result 5 ""
+        }
 
-        //testCaseAsync "Fable base logging test save path to mutable" <| async {
-        //    let mutable res = ""
-        //    let loggingFunc = fun (logger: Logger) -> logger.dynamicAccess("Request.Path") |> printfn "fabulous-minutes: %A"
-        //    let proxy = createloggedTestServer(loggingFunc)
-        //    let! result = proxy.call(fun server -> server.getLength "hello")
-        //    Expect.isNotEmpty res ""
-        //}
+        testCaseAsync "Logger test with Dynamic Access to mutable variable" <| async {
+            let! result = dynAccMutableLoggerProxy.call(fun server -> server.getLength "hello")
+            let expectedPath = "/dynAccMutable/api/ILoggingServer/getLength"
+            Expect.equal Logger.DynamicAccessMutable.str expectedPath ""
+            Expect.equal result 5 ""
+        }
+
+        testCaseAsync "Logger test with Dynamic Access and log storage type" <| async {
+            let expectedPath = "/storage/api/ILoggingServer/getLength"
+            let! result = storageLoggerProxy.call(fun server -> server.getLength "hello")
+            let logs = Logger.Storage.logStorage.GetLogs()
+            let exmpLog = logs |> Array.find (fun (p,log) -> p = "\test\api\path")
+            let newLog = logs |> Array.find (fun (p,log) -> p = expectedPath) |> snd
+            let nOfLogs = logs.Length
+            Expect.equal (snd exmpLog) StorageUtils.exmpLog ""
+            Expect.equal 2 nOfLogs "If this errors: Check if any new tests add logs to the storage. It is initialized outside of the function." // 1 exmp log + 1 new log
+            Expect.equal newLog.Path expectedPath ""
+            Expect.equal newLog.IsSuccess true ""
+            Expect.equal newLog.Body """["hello"]""" "If This is empty. The ctx.Request.body was read in. Needs to reset body."
+            Expect.isNotEmpty newLog.Timestamp ""
+            Expect.equal result 5 ""
+        }
 
     ]
