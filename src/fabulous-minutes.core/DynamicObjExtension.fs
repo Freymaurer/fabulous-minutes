@@ -1,4 +1,4 @@
-﻿namespace FabulousMinutes.Core
+﻿namespace FabulousMinutes
 
 open Newtonsoft.Json
 open DynamicObj

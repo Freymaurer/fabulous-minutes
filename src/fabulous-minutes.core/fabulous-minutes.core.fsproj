@@ -2,7 +2,7 @@
 
 	<PropertyGroup>
 		<TargetFramework>net5.0</TargetFramework>
-		<RootNamespace>fabulous_minutes.core</RootNamespace>
+		<RootNamespace>FabulousMinutes</RootNamespace>
 		<GenerateDocumentationFile>true</GenerateDocumentationFile>
 	</PropertyGroup>
 
@@ -13,8 +13,20 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<PackageReference Update="FSharp.Core" Version="5.0.2" />
 		<PackageReference Include="DynamicObj" Version="1.0.1" />
 		<PackageReference Include="Giraffe" Version="5.0.0" />
 	</ItemGroup>
 
+	<PropertyGroup>
+		<Authors>Kevin Frey</Authors>
+		<Description>Small logging library for Fable.Remoting on Giraffe and Saturn</Description>
+		<Summary>Small logging library for Fable.Remoting on Giraffe and Saturn</Summary>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageProjectUrl>https://github.com/Freymaurer/fabulous-minutes</PackageProjectUrl>
+		<PackageTags>logging fable-remoting giraffe saturn safe</PackageTags>
+		<RepositoryUrl>https://github.com/Freymaurer/fabulous-minutes</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+	</PropertyGroup>
+	
 </Project>
