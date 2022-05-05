@@ -1,3 +1,10 @@
+### 0.1.0+e6fbaba (Released 2022-5-5)
+* Additions:
+    * latest commit #e6fbaba
+    * [[#8fc916b](https://github.com/Freymaurer/fabulous-minutes/commit/8fc916b4b79889c6197a7071348ef832e5864eb1)] Add seqhead logic to dynamic access :tada:
+    * [[#5200dfd](https://github.com/Freymaurer/fabulous-minutes/commit/5200dfdc7dc0bc86f78949ba511ac10d6a11c206)] Rename namespace to FabulousMinutes
+    * [[#e6fbaba](https://github.com/Freymaurer/fabulous-minutes/commit/e6fbaba934c3d95d1f186d7c85513f8d49655652)] Update tests :white_check_mark:
+
 ### 0.0.0+ae07a08 (Released 2022-5-2)
 * Additions:
     * latest commit #ae07a08
