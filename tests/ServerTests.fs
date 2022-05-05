@@ -11,7 +11,8 @@ open Expecto
 open Expecto.Logging
 open Expecto.Logging.Message
 
-open FabulousMinutes.Core
+open FabulousMinutes
+open Types
 
 module StorageUtils =
 
@@ -40,18 +41,16 @@ module StorageUtils =
 
 type ILoggingServer = {
     helloWorld : unit -> Async<string>
-    // primitive types
-    simpleUnit : unit -> Async<int>
     getLength : string -> Async<int>
-    echoString : string -> Async<string>
+    echoStringList: string list -> Async<string list>
+    echoPerson:  PersonTestType -> Async<PersonTestType>
 }
 
 let loggingServer (ctx: HttpContext) : ILoggingServer  = {
     helloWorld = fun () -> async { return "hello" }
-    // primitive types
-    simpleUnit = fun () -> async { return 42 }
     getLength = fun input -> async { return input.Length }
-    echoString = fun str -> async { return str }
+    echoStringList = fun strList -> async { return strList }
+    echoPerson = fun person -> async { return person }
 }
 
 module Route =
@@ -86,7 +85,8 @@ module Logger =
             fun logger -> 
                 let path = logger.DynamicAccess "Request.Path"
                 let ts = logger.TryGetValue("Timestamp") |> Option.get
-                expectoLogger.info(Message.eventX $"dynAccessPrintLogging: {path} {ts}")
+                let body = logger.DynamicAccess<Logger> "Request.Body"
+                expectoLogger.infoWithBP(Message.eventX $"dynAccessPrintLogging: {path} {ts} <{body.ToJson()}>") |> Async.RunSynchronously
 
         let webApp =
             createWebApp dynAccessPrintLogging "dynAcc"
@@ -95,13 +95,13 @@ module Logger =
        
         let mutable str = ""
 
-        let dynAccessPrintLogging : Logger -> unit = 
+        let dynAccessMutableLogging : Logger -> unit = 
             fun logger -> 
                 let path = logger.DynamicAccess "Request.Path" |> string
                 str <- path
 
         let webApp =
-            createWebApp dynAccessPrintLogging "dynAccMutable"
+            createWebApp dynAccessMutableLogging "dynAccMutable"
 
     module Storage =
 
@@ -112,10 +112,10 @@ module Logger =
         let logToStorage : Logger -> unit = 
             fun logger -> 
                 let p = logger.GetPath()
-                let body = logger.DynamicAccess<string> "Request.Body"
-                let isSuccess = logger.DynamicAccess<string> "Response.StatusCode" |> fun x -> x = "200"
+                let body = logger.DynamicAccess<Logger> "Request.Body"
+                let isSuccess = logger.DynamicAccess<int> "Response.StatusCode" |> fun x -> x = 200
                 let ts = logger.DynamicAccess<string> "Timestamp"
-                StorageUtils.MyLog.create p body isSuccess ts
+                StorageUtils.MyLog.create p (body.ToJson()) isSuccess ts
                 |> logStorage.AddLog
 
         let webApp =
@@ -188,9 +188,10 @@ let server_fable_remoting_tests =
             Expect.equal result 5 ""
         }
 
-        testCaseAsync "Logger test with Dynamic Access print to console" <| async {
-            let! result = dynAccPrintLoggerProxy.call(fun server -> server.getLength "hello")
-            Expect.equal result 5 ""
+        testCaseAsync "Logger test with Dynamic Access print to console with record type" <| async {
+            let person = {Name = "Sam"; Age = 28; Size = 1.84}
+            let! result = dynAccPrintLoggerProxy.call(fun server -> server.echoPerson person)
+            Expect.equal result person ""
         }
 
         testCaseAsync "Logger test with Dynamic Access to mutable variable" <| async {

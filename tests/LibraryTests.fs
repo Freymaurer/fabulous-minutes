@@ -3,7 +3,7 @@ module LibraryTests
 open Expecto
 open DynamicObj
 
-open FabulousMinutes.Core
+open FabulousMinutes
 
 /// This function should always ONLY BE USED FOR TESTING!
 /// THIS FUNCTION KILLS ANY WHITESPACE EVEN FROM JSON VALUES!
@@ -99,8 +99,11 @@ let dynamicObj_json_converter_tests =
         }
     ]
 
-open FabulousMinutes.Core.DynamicAccess
-open FabulousMinutes.Core.DynamicAccess.Regex
+open FabulousMinutes.DynamicAccess
+open FabulousMinutes.DynamicAccess.Regex
+
+let testLogJson = 
+    minifyJson """{"Timestamp":"2022.05.03 07:28:11.82714","Request":{"Path":"/api/IHelpdeskAPI/getCaptcha","PathBase":"","Method":"GET","Host":"localhost","Port":8085,"QueryString":"","Query":null,"Headers":{"Connection":"close","Content-Type":"application/json; charset=utf-8","Accept":"*/*","Accept-Encoding":"gzip, deflate, br","Accept-Language":"en-GB,en-US;q=0.9,en;q=0.8","Cookie":"ajs_anonymous_id=%22bf0866e7-3877-4d25-8805-c1b2a4b5bd71%22; isDarkmode=false","Host":"localhost:8085","Referer":"http://localhost:8080/","User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.84 Safari/537.36 OPR/85.0.4341.75","sec-fetch-dest":"empty","sec-fetch-mode":"cors","sec-fetch-site":"same-origin","sec-ch-ua-platform":"\"Windows\"","sec-ch-ua-mobile":"?0","x-remoting-proxy":"true","sec-ch-ua":"\" Not A;Brand\";v=\"99\", \"Chromium\";v=\"99\", \"Opera\";v=\"85\""},"UserAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.84 Safari/537.36 OPR/85.0.4341.75","ContentType":"application/json; charset=utf-8","Body":[{"Name":"Sam","Age":28,"Size":1.84}]},"Response":{"StatusCode":200,"Time":"00:00:00.0000627"}}"""
 
 [<Tests>]
 let dynamic_access_tests =
@@ -171,20 +174,34 @@ let dynamic_access_tests =
             let readDynObjIntoFormatString = readDynObjInFormatString(dynObjOfJson,formatString)
             Expect.equal readDynObjIntoFormatString result "readDynObjIntoFormatString should equal result."
         }
+        test "Test dynamicAccess with seq header logic" {
+            let logger = Logger.OfJson(testLogJson)
+            let bodyName = logger.DynamicAccess<string> "Request.Body^?.Name"
+            let bodyAge = logger.DynamicAccess<int> "Request.Body^?.Age"
+            let bodySize = logger.DynamicAccess<float> "Request.Body^?.Size"
+            Expect.equal bodyName "Sam" ""
+            Expect.equal bodyAge 28 ""
+            Expect.equal bodySize 1.84 ""
+        }
     ]
+
+
+type Response = {
+    StatusCode: int
+    Time: string
+}
+
+open Types
 
 [<Tests>]
 let logger_tests =
     testList "logger tests" [
         test "Test simple dynamic access member" {
-            let simpleJson = minifyJson """{"myLog": {"Timestamp": "2022.03.28 07:45:10.00949","Request": {"Path": "/api/IHelpdeskAPI/checkCaptcha","PathBase": "","Method": "POST","Host": "localhost","Port": "8085","QueryString": ""}}}"""
-            let dynObjOfJson = DynamicObj.ofJson (simpleJson)
-            let logger = Logger()
-            dynObjOfJson.CopyDynamicPropertiesTo(logger)
-            let dynamicAccessPath = logger.DynamicAccess "myLog.Request.Path" 
-            let revertToJson = DynamicObj.toJson dynObjOfJson
-            Expect.equal revertToJson simpleJson ""
-            Expect.equal dynamicAccessPath "/api/IHelpdeskAPI/checkCaptcha" ""
+            let logger = Logger.OfJson testLogJson
+            let dynamicAccessPath = logger.DynamicAccess "Request.Path" 
+            let revertToJson = DynamicObj.toJson logger
+            Expect.equal revertToJson testLogJson ""
+            Expect.equal dynamicAccessPath "/api/IHelpdeskAPI/getCaptcha" ""
         }
         test "Test nested prints" {
             let outer = Logger()
@@ -200,24 +217,74 @@ let logger_tests =
                     | e -> false
             Expect.isTrue print "Expected to print nested object."
         }
-
         test "Test different access functions" {
-            let simpleJson = minifyJson """{"myLog": {"Timestamp": "2022.03.28 07:45:10.00949","Request": {"Path": "/api/IHelpdeskAPI/checkCaptcha","PathBase": "","Method": "POST","Host": "localhost","Port": "8085","QueryString": ""}}}"""
-            let dynObjOfJson = DynamicObj.ofJson (simpleJson)
-            let logger = Logger()
-            dynObjOfJson.CopyDynamicPropertiesTo(logger)
-            let dynamicAccess = logger.DynamicAccess "myLog.Request.Port" 
-            let tryDynamicAccess = logger.TryDynamicAccess "myLog.Request.Port"
-            let dynamicAccessTyped = logger.DynamicAccess<Logger> "myLog"
+            let logger = Logger.OfJson testLogJson
+            let dynamicAccess = logger.DynamicAccess "Request.Port"
+            let tryDynamicAccess = logger.TryDynamicAccess "Request.Port"
+            let dynamicAccessTyped = logger.DynamicAccess<int> "Request.Port" 
+            let tryDynamicAccessTyped = logger.TryDynamicAccess<int> "Request.Port" 
+            let dynamicAccessTypedDynObj = logger.DynamicAccess<DynamicObj> "Request"
             let dynamicAccessTypedInner =
                 let l = Logger()
-                dynamicAccessTyped.CopyDynamicPropertiesTo(l) 
-                l.DynamicAccess "Request.Path"
-            let revertToJson = DynamicObj.toJson dynObjOfJson
-            Expect.equal revertToJson simpleJson ""
-            Expect.equal dynamicAccess "8085" ""
-            Expect.equal tryDynamicAccess (Some "8085") ""
-            Expect.equal dynamicAccessTypedInner "/api/IHelpdeskAPI/checkCaptcha" ""
+                dynamicAccessTypedDynObj.CopyDynamicPropertiesTo(l) 
+                l.DynamicAccess "Path"
+            let revertToJson = DynamicObj.toJson logger
+            Expect.equal revertToJson testLogJson ""
+            Expect.equal dynamicAccess 8085 ""
+            Expect.equal tryDynamicAccessTyped (Some 8085) ""
+            Expect.equal dynamicAccessTyped 8085 ""
+            Expect.equal tryDynamicAccess (Some 8085) ""
+            Expect.equal dynamicAccessTypedInner "/api/IHelpdeskAPI/getCaptcha" ""
+        }
+        test "Test dynamic access as record type" {
+            let logger = Logger.OfJson testLogJson
+            let response = logger.TryDynamicAccessAsRecordType<Response> "Response"
+            Expect.isTrue response.IsSome ""
+            Expect.equal response.Value.StatusCode 200 ""
+            Expect.equal response.Value.Time "00:00:00.0000627" ""
+        }
+        test "Test Logger automated obj to json logic" {
+            let expectedResult = """{"Name":"Sam","Age":28,"Size":1.84}"""
+            let logger = Logger.OfJson testLogJson
+            let templateStr = """{Request.Body^?}"""
+            let response = logger.ToTemplate(templateStr)
+            Expect.equal response expectedResult ""
+        }
+        test "Test Logger automated obj seq to json logic" {
+            let expectedResult = """[{"Name":"Sam","Age":28,"Size":1.84}]"""
+            let logger = Logger.OfJson testLogJson
+            let templateStr = """{Request.Body}"""
+            let response = logger.ToTemplate(templateStr)
+            Expect.equal response expectedResult ""
+        }
+        test "Test Logger default template string" {
+            let logger = Logger.OfJson testLogJson
+            let response = logger.ToTemplate()
+            // minify json kills the space in the timestamp
+            let expectedRes = """fabulous-minutes -- Response 200. Request at /api/IHelpdeskAPI/getCaptcha, 2022.05.0307:28:11.82714 with body: [{"Name":"Sam","Age":28,"Size":1.84}]"""
+            Expect.equal response expectedRes ""
+        }
+        test "Logger dynamic access to record type" {
+            let logger = Logger.OfJson testLogJson
+            let response = logger.TryDynamicAccessAsRecordType<Response> "Response"
+            Expect.isTrue response.IsSome ""
+            Expect.equal response.Value.StatusCode 200 ""
         }
 
+        test "Logger dynamic access to record type seq" {
+            let expectedResult = [{Name = "Sam"; Age = 28; Size = 1.84}]
+            let logger = Logger.OfJson testLogJson
+            let response = logger.TryDynamicAccessAsRecordTypeSeq<Types.PersonTestType> "Request.Body"
+            Expect.isTrue response.IsSome ""
+            Expect.equal (List.head response.Value) (List.head expectedResult) ""
+            Expect.equal response.Value expectedResult ""
+        }
+
+        test "Logger dynamic access to record type and seq header" {
+            let expectedResult = {Name = "Sam"; Age = 28; Size = 1.84}
+            let logger = Logger.OfJson testLogJson
+            let response = logger.TryDynamicAccessAsRecordType<Types.PersonTestType> "Request.Body^?"
+            Expect.isTrue response.IsSome ""
+            Expect.equal response.Value expectedResult ""
+        }
     ]
