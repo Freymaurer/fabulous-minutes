@@ -159,6 +159,15 @@ type Logger(?customLogging: Logger -> unit) =
                             |> Seq.tryFind (fun x -> x.Key = "Content-Type")
                             |> Option.map (fun x -> x.Value |> String.concat ",")
                             |> Option.defaultValue ""
+                        let body = 
+                            if body = "" then 
+                                Logger() 
+                                |> box
+                            else 
+                                try (Logger.OfJson body)
+                                with
+                                    | exn -> failwith $"Unable to parse request body to json element. {exn.Message}" 
+                                |> box
                         [
                             "Path", box ctx.Request.Path
                             "PathBase", box ctx.Request.PathBase
@@ -172,7 +181,7 @@ type Logger(?customLogging: Logger -> unit) =
                             "Headers", if ctx.Request.Headers.Count > 0 then box headers else null
                             "UserAgent", box userAgent
                             "ContentType", box contentType
-                            "Body", box (Logger.OfJson body)
+                            "Body", body
                         ]
                         |> List.map (fun x -> fst x, snd x)
                     let logger : Logger =

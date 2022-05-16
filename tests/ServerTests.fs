@@ -85,8 +85,8 @@ module Logger =
             fun logger -> 
                 let path = logger.DynamicAccess "Request.Path"
                 let ts = logger.TryGetValue("Timestamp") |> Option.get
-                let body = logger.DynamicAccess<Logger> "Request.Body"
-                expectoLogger.infoWithBP(Message.eventX $"dynAccessPrintLogging: {path} {ts} <{body.ToJson()}>") |> Async.RunSynchronously
+                let body = logger.DynamicAccess<Logger> "Request.Body" |> fun x -> x.ToJson()
+                expectoLogger.infoWithBP(Message.eventX $"dynAccessPrintLogging: {path} {ts} <{body}>") |> Async.RunSynchronously
 
         let webApp =
             createWebApp dynAccessPrintLogging "dynAcc"
@@ -112,14 +112,33 @@ module Logger =
         let logToStorage : Logger -> unit = 
             fun logger -> 
                 let p = logger.GetPath()
-                let body = logger.DynamicAccess<Logger> "Request.Body"
+                let body = 
+                    try 
+                        logger.DynamicAccess<Logger> "Request.Body"
+                        |> fun x -> x.ToJson()
+                    with
+                        | exn -> ""
                 let isSuccess = logger.DynamicAccess<int> "Response.StatusCode" |> fun x -> x = 200
                 let ts = logger.DynamicAccess<string> "Timestamp"
-                StorageUtils.MyLog.create p (body.ToJson()) isSuccess ts
+                StorageUtils.MyLog.create p body isSuccess ts
                 |> logStorage.AddLog
 
         let webApp =
             createWebApp logToStorage "storage"
+
+    module FileLogger =
+
+        let logToFile : Logger -> unit = 
+            fun logger -> 
+                let p0 = logger.GetPath().Replace("/","")
+                let p = $"{p0}.txt"
+                let body = 
+                    logger.DynamicAccess<Logger> "Request.Body"
+                    |> fun x -> x.ToJson()
+                File.WriteAllTextAsync(p, body) |> Async.AwaitTask |> Async.RunSynchronously
+
+        let webApp =
+            createWebApp logToFile "file"
 
 
 module ServerParts =
@@ -138,6 +157,7 @@ module ServerParts =
             DynamicAccessPrint.webApp
             DynamicAccessMutable.webApp
             Storage.webApp
+            FileLogger.webApp
         ]
 
     let configureApp (app : IApplicationBuilder) =
@@ -165,6 +185,7 @@ module ClientParts =
     let dynAccPrintLoggerProxy = Proxy.custom<ILoggingServer> (Route.builder "dynAcc") client false
     let dynAccMutableLoggerProxy = Proxy.custom<ILoggingServer> (Route.builder "dynAccMutable") client false
     let storageLoggerProxy = Proxy.custom<ILoggingServer> (Route.builder "storage") client false
+    let fileLoggerProxy = Proxy.custom<ILoggingServer> (Route.builder "file") client false
 
 open ClientParts
 
@@ -181,6 +202,11 @@ let server_fable_remoting_tests =
         testCaseAsync "Logger test with print to console" <| async {
             let! result = printLoggerProxy.call(fun server -> server.getLength "hello")
             Expect.equal result 5 ""
+        }
+
+        testCaseAsync "Logger test empty request body" <| async {
+            let! result = printLoggerProxy.call(fun server -> server.helloWorld () )
+            Expect.equal result "hello" "This could fail if an empty request body is not correctly parsed to the logger obj."
         }
 
         testCaseAsync "Logger test with print to console duplicate (test async)" <| async {
@@ -207,14 +233,43 @@ let server_fable_remoting_tests =
             let logs = Logger.Storage.logStorage.GetLogs()
             let exmpLog = logs |> Array.find (fun (p,log) -> p = "\test\api\path")
             let newLog = logs |> Array.find (fun (p,log) -> p = expectedPath) |> snd
-            let nOfLogs = logs.Length
             Expect.equal (snd exmpLog) StorageUtils.exmpLog ""
-            Expect.equal 2 nOfLogs "If this errors: Check if any new tests add logs to the storage. It is initialized outside of the function." // 1 exmp log + 1 new log
             Expect.equal newLog.Path expectedPath ""
             Expect.equal newLog.IsSuccess true ""
             Expect.equal newLog.Body """["hello"]""" "If This is empty. The ctx.Request.body was read in. Needs to reset body."
             Expect.isNotEmpty newLog.Timestamp ""
             Expect.equal result 5 ""
+        }
+
+        //testCaseAsync "Logger test with File" <| async {
+        //    let! result = fileLoggerProxy.call(fun server -> server.getLength "hello")
+        //    let p0 = "/file/api/ILoggingServer/getLength".Replace("/","")
+        //    let p = $"{p0}.txt"
+        //    let! t = 
+        //        task {
+        //            let! body = File.ReadAllTextAsync(p)
+        //            Expect.equal body """["hello"]""" "If This is empty. The ctx.Request.body was read in. Needs to reset body."
+        //            let! delete = async { File.Delete p }
+        //            return ()
+        //        } 
+        //        |> Async.AwaitTask
+        //    Expect.equal result 5 ""
+        //}
+
+        testCaseAsync "Logger test with File and empty request body." <| async {
+            let! result = fileLoggerProxy.call(fun server -> server.helloWorld () )
+            let p0 = "/file/api/ILoggingServer/helloWorld".Replace("/","")
+            let p = $"{p0}.txt"
+            let! t = 
+                task {
+                    let! body = File.ReadAllTextAsync(p)
+                    Expect.equal body """[null]""" "First time check to see how empty request bodies are handled."
+                    let! delete = async { File.Delete p }
+                    return ()
+                } 
+                |> Async.AwaitTask
+            //File.Delete(p)
+            Expect.equal result "hello" ""
         }
 
     ]

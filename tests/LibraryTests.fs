@@ -97,6 +97,18 @@ let dynamicObj_json_converter_tests =
             let revertToJson = DynamicObj.toJson dynObjOfJson
             Expect.equal json revertToJson "Recreated Json equals json source with root level json array with simple elements."
         }
+        test "Root json array with null" {
+            let json = minifyJson """[null]"""
+            let dynObjOfJson = DynamicObj.ofJson json
+            let revertToJson = DynamicObj.toJson dynObjOfJson
+            Expect.equal json revertToJson "Recreated Json equals json source with root level json array with simple elements."
+        }
+        test "Empty logger to json" {
+            let l = Logger ()
+            let res = l.ToJson()
+            Expect.equal res "{}" ""
+        }
+
     ]
 
 open FabulousMinutes.DynamicAccess
